@@ -232,10 +232,7 @@ void HAL_TIM_Base_MspInit(TIM_HandleTypeDef* tim_baseHandle)
     hdma_tim1_ch2.Init.MemDataAlignment = DMA_MDATAALIGN_HALFWORD;
     hdma_tim1_ch2.Init.Mode = DMA_CIRCULAR;
     hdma_tim1_ch2.Init.Priority = DMA_PRIORITY_HIGH;
-    hdma_tim1_ch2.Init.FIFOMode = DMA_FIFOMODE_ENABLE;
-    hdma_tim1_ch2.Init.FIFOThreshold = DMA_FIFO_THRESHOLD_FULL;
-    hdma_tim1_ch2.Init.MemBurst = DMA_MBURST_SINGLE;
-    hdma_tim1_ch2.Init.PeriphBurst = DMA_PBURST_SINGLE;
+    hdma_tim1_ch2.Init.FIFOMode = DMA_FIFOMODE_DISABLE;
     if (HAL_DMA_Init(&hdma_tim1_ch2) != HAL_OK)
     {
       Error_Handler();
