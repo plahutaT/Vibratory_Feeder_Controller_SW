@@ -1,0 +1,25 @@
+﻿# Eclipse / STM32CubeIDE
+.settings/
+.project
+.cproject
+.parent-project
+# Build outputs
+Debug/
+Release/
+*.elf
+*.hex
+*.bin
+*.map
+*.lst
+# CubeMX temporary files
+*.ioc.backup
+# OS generated files
+.DS_Store
+Thumbs.db
+# Logs
+*.log
+# Dependency directories (if using submodules)
+**/Third_Party/
+# STM32Cube firmware packs (optional, as they can be large)
+Drivers/STM32*/Inc/
+Drivers/STM32*/Src/
