@@ -84,6 +84,9 @@ volatile uint8_t adc1_sampl_ready_f = 0;
 volatile uint8_t adc2_sampl_ready_f = 0;
 
 
+volatile uint8_t adxl345_data_ready_f = 0;
+
+
 // USB command buffer for CLI input (e.g., "CHANGE_FREQ 50")
 uint8_t cmd_usb_buffer[64];
 uint8_t cmd_length;
@@ -156,44 +159,44 @@ static void MPU_Config(void);
 int main(void)
 {
 
-	/* USER CODE BEGIN 1 */
+  /* USER CODE BEGIN 1 */
 
-	/* USER CODE END 1 */
+  /* USER CODE END 1 */
 
-	/* MPU Configuration--------------------------------------------------------*/
-	MPU_Config();
+  /* MPU Configuration--------------------------------------------------------*/
+  MPU_Config();
 
-	/* MCU Configuration--------------------------------------------------------*/
+  /* MCU Configuration--------------------------------------------------------*/
 
-	/* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-	HAL_Init();
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
 
-	/* USER CODE BEGIN Init */
+  /* USER CODE BEGIN Init */
 
-	/* USER CODE END Init */
+  /* USER CODE END Init */
 
-	/* Configure the system clock */
-	SystemClock_Config();
+  /* Configure the system clock */
+  SystemClock_Config();
 
-	/* Configure the peripherals common clocks */
-	PeriphCommonClock_Config();
+  /* Configure the peripherals common clocks */
+  PeriphCommonClock_Config();
 
-	/* USER CODE BEGIN SysInit */
+  /* USER CODE BEGIN SysInit */
 
-	/* USER CODE END SysInit */
+  /* USER CODE END SysInit */
 
-	/* Initialize all configured peripherals */
-	MX_GPIO_Init();
-	MX_DMA_Init();
-	MX_USB_DEVICE_Init();
-	MX_I2C2_Init();
-	MX_TIM1_Init();
-	MX_ADC1_Init();
-	MX_ADC2_Init();
-	MX_TIM7_Init();
-	MX_TIM6_Init();
-	MX_TIM15_Init();
-	/* USER CODE BEGIN 2 */
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_DMA_Init();
+  MX_USB_DEVICE_Init();
+  MX_I2C2_Init();
+  MX_TIM1_Init();
+  MX_ADC1_Init();
+  MX_ADC2_Init();
+  MX_TIM7_Init();
+  MX_TIM6_Init();
+  MX_TIM15_Init();
+  /* USER CODE BEGIN 2 */
 	//  HAL_GPIO_WritePin(SPI2_CS_GPIO_Port, SPI2_CS_Pin, GPIO_PIN_SET);
 	//  bgt60ltr11_HW_reset();
 
@@ -361,6 +364,14 @@ int main(void)
 			cmd_length = 0;  // Reset the buffer after processing
 		}
 
+		else if (adxl345_data_ready_f)
+		{
+
+			ADXL345_I2C_ReadAccXYZ(faccelData, OUTPUT_FLOAT);
+			adxl345_data_ready_f = 0;
+
+		}
+
 
 	}
   /* USER CODE END 3 */
@@ -462,14 +473,9 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
   if (GPIO_Pin == ADXL345_IT_Pin) {
       /* Read acceleration data when interrupt occurs */
-      if (ADXL345_I2C_ReadAccXYZ(faccelData, OUTPUT_FLOAT) == HAL_OK) {
-          // Data is now in accelData[0] (X), accelData[1] (Y), accelData[2] (Z) in g (scaled by gain)
-          // Process data here, e.g., print or store
-          // Example: Use debug output if available
-          // printf("X: %d, Y: %d, Z: %d mg\r\n", accelData[0], accelData[1], accelData[2]);
-      } else {
-          Error_Handler(); // Handle read failure
-      }
+
+	  adxl345_data_ready_f = 1;
+
   }
 }
 

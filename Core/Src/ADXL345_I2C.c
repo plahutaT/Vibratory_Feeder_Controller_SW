@@ -188,6 +188,9 @@ HAL_StatusTypeDef ADXL345_I2C_StartMeasure(State state)
     } else {
         reg &= ~(1 << 3);  // Clear measure
     }
+    uint8_t intsource;
+	ADXL345_I2C_ClearInterruptFlags(&intsource);
+
     return ADXL345_I2C_writeRegister(ADXL345_POWER_CTL_REG, reg);
 }
 
@@ -240,10 +243,12 @@ HAL_StatusTypeDef ADXL345_I2C_EnableDataReadyInterrupt(uint8_t intPin)
 
     // Optionally map DATA_READY to the specified interrupt pin (bit 7 in INT_MAP, Address 0x2F)
 	// 0 = INT1, 1 = INT2 (inverted logic for mapping)
+
 	if (ADXL345_I2C_readRegister(ADXL345_INT_MAP_REG, &reg, 1) != HAL_OK) {
 		return HAL_ERROR;
 	}
-	reg &= ~(1 << 7); // Clear bit 7 first
+	//reg &= ~(1 << 7); // Clear bit 7 first
+	reg = 0;
 	if (intPin == 1) { // Map to INT2 if intPin is 1
 		reg |= (1 << 7);
 	} // Else, keep mapped to INT1 (default when bit 7 = 0)
@@ -256,9 +261,24 @@ HAL_StatusTypeDef ADXL345_I2C_EnableDataReadyInterrupt(uint8_t intPin)
         return HAL_ERROR;
     }
     // If any other interrupts are enabled something is wrong
-    if (reg) return HAL_ERROR;
+    //if (reg) return HAL_ERROR;
 
-    reg |= (1 << 7); // Set DATA_READY bit
+    //reg |= (1 << 7); // Set DATA_READY bit
+
+    reg = 0x00;
+	if (ADXL345_I2C_writeRegister(ADXL345_INT_ENABLE_REG, reg) != HAL_OK) {
+		return HAL_ERROR;
+	}
+
+    uint8_t intsource;
+	ADXL345_I2C_ClearInterruptFlags(&intsource);
+
+	// Enable DATA_READY interrupt (bit 7 in INT_ENABLE register, Address 0x2E)
+	if (ADXL345_I2C_readRegister(ADXL345_INT_ENABLE_REG, &reg, 1) != HAL_OK) {
+		return HAL_ERROR;
+	}
+
+    reg = 0x80;
     if (ADXL345_I2C_writeRegister(ADXL345_INT_ENABLE_REG, reg) != HAL_OK) {
         return HAL_ERROR;
     }
