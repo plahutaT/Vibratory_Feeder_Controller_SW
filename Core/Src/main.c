@@ -128,9 +128,10 @@ float dc_link_voltage_value = 0.0f;
 
 uint8_t devID = 0;
 
-uint8_t recivedData[6];
-int16_t x, y, z;
-float gx, gy, gz;
+// Buffer to store acceleration data
+volatile int16_t accelData[3]; // X, Y, Z axes
+volatile float faccelData[3];
+
 
 
 /* USER CODE END PV */
@@ -155,197 +156,213 @@ static void MPU_Config(void);
 int main(void)
 {
 
-  /* USER CODE BEGIN 1 */
+	/* USER CODE BEGIN 1 */
 
-  /* USER CODE END 1 */
+	/* USER CODE END 1 */
 
-  /* MPU Configuration--------------------------------------------------------*/
-  MPU_Config();
+	/* MPU Configuration--------------------------------------------------------*/
+	MPU_Config();
 
-  /* MCU Configuration--------------------------------------------------------*/
+	/* MCU Configuration--------------------------------------------------------*/
 
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
+	/* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+	HAL_Init();
 
-  /* USER CODE BEGIN Init */
+	/* USER CODE BEGIN Init */
 
-  /* USER CODE END Init */
+	/* USER CODE END Init */
 
-  /* Configure the system clock */
-  SystemClock_Config();
+	/* Configure the system clock */
+	SystemClock_Config();
 
-  /* Configure the peripherals common clocks */
-  PeriphCommonClock_Config();
+	/* Configure the peripherals common clocks */
+	PeriphCommonClock_Config();
 
-  /* USER CODE BEGIN SysInit */
+	/* USER CODE BEGIN SysInit */
 
-  /* USER CODE END SysInit */
+	/* USER CODE END SysInit */
 
-  /* Initialize all configured peripherals */
-  MX_GPIO_Init();
-  MX_DMA_Init();
-  MX_USB_DEVICE_Init();
-  MX_I2C2_Init();
-  MX_TIM1_Init();
-  MX_ADC1_Init();
-  MX_ADC2_Init();
-  MX_TIM7_Init();
-  MX_TIM6_Init();
-  /* USER CODE BEGIN 2 */
-//  HAL_GPIO_WritePin(SPI2_CS_GPIO_Port, SPI2_CS_Pin, GPIO_PIN_SET);
-//  bgt60ltr11_HW_reset();
+	/* Initialize all configured peripherals */
+	MX_GPIO_Init();
+	MX_DMA_Init();
+	MX_USB_DEVICE_Init();
+	MX_I2C2_Init();
+	MX_TIM1_Init();
+	MX_ADC1_Init();
+	MX_ADC2_Init();
+	MX_TIM7_Init();
+	MX_TIM6_Init();
+	MX_TIM15_Init();
+	/* USER CODE BEGIN 2 */
+	//  HAL_GPIO_WritePin(SPI2_CS_GPIO_Port, SPI2_CS_Pin, GPIO_PIN_SET);
+	//  bgt60ltr11_HW_reset();
 
-  HAL_ADCEx_Calibration_Start(&hadc1, ADC_CALIB_OFFSET_LINEARITY, ADC_DIFFERENTIAL_ENDED);
-  HAL_ADCEx_Calibration_Start(&hadc2, ADC_CALIB_OFFSET_LINEARITY, ADC_DIFFERENTIAL_ENDED);
+	/* ADXL345 Initialization Structure */
+	ADXL_InitTypeDef adxlConfig = {
+		.SPIMode = SPIMODE_4WIRE,   // Default for I2C compatibility
+		.IntMode = INT_ACTIVEHIGH,  // Active high interrupt
+		.LPMode = LPMODE_NORMAL,    // Normal power mode
+		.Rate = BWRATE_800,         // 800 Hz data rate
+		.Range = RANGE_4G,          // ±4g range
+		.Resolution = RESOLUTION_10BIT, // 10-bit resolution
+		.Justify = JUSTIFY_SIGNED,  // Signed justification
+		.AutoSleep = AUTOSLEEPOFF,  // Disable auto-sleep
+		.LinkMode = LINKMODEOFF     // Disable link mode
+	};
 
-  HAL_TIM_Base_Start(&htim6);
-  if (HAL_ADC_Start_DMA(&hadc1, (uint32_t*)load_current_buff, LOAD_CURRENT_BUFFER_LENGHT) != HAL_OK) {
-      error_cnt++;
-  }
-
-  HAL_ADC_Start_IT(&hadc2);
-
-
-  // Initialize LUT buffers with original sine values
-  SPWM_GenerateLUTs(10000.0f, 50.0f, 499, 0.95, &g_ns_active);
-
-  HAL_Delay(1000);
-
-
-
-  HAL_TIM_Base_Start_IT(&htim7);
-  //ADXL345_I2C_Init();
-  data_ready_f = 0;
-
-  //HAL_TIM_Base_Start(&htim1);
-  //HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
-  //HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
-  //HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
-  //HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_2);
+	HAL_ADCEx_Calibration_Start(&hadc1, ADC_CALIB_OFFSET_LINEARITY, ADC_DIFFERENTIAL_ENDED);
+	HAL_ADCEx_Calibration_Start(&hadc2, ADC_CALIB_OFFSET_LINEARITY, ADC_DIFFERENTIAL_ENDED);
 
 
-  /* TODO check out DMA burst mode
-   * DMA Burst on Update (hardware “both at once”)
+	HAL_TIM_Base_Start(&htim6);
+	if (HAL_ADC_Start_DMA(&hadc1, (uint32_t*)load_current_buff, LOAD_CURRENT_BUFFER_LENGHT) != HAL_OK) {
+	  error_cnt++;
+	}
+
+	HAL_TIM_Base_Start(&htim15);
+	HAL_ADC_Start_IT(&hadc2);
+
+
+	// Initialize LUT buffers with original sine values
+	SPWM_GenerateLUTs(10000.0f, 50.0f, 499, 0.5, &g_ns_active);
+
+	HAL_Delay(500);
+
+	HAL_TIM_Base_Start_IT(&htim7);
+
+	/* Initialize ADXL345 */
+	if (ADXL345_I2C_Init(&adxlConfig) != HAL_OK)
+	{
+	  error_cnt++; // Handle initialization failure
+	}
+	/* Start measurement mode */
+	if (ADXL345_I2C_StartMeasure(ON) != HAL_OK)
+	{
+		error_cnt++; // Handle measurement start failure
+	}
+
+	HAL_Delay(500);
+
+	data_ready_f = 0;
+
+	//HAL_TIM_Base_Start(&htim1);
+	//HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+	//HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
+	//HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
+	//HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_2);
+
+
+	/* TODO check out DMA burst mode
+	* DMA Burst on Update (hardware “both at once”)
 
 	Enable preload for OC1/OC2.
 	Configure TIM1 DCR to burst-write CCR1 then CCR2 on UDE (update DMA request).
 	One DMA stream with interleaved buffer: [d1_0, d2_0, d1_1, d2_1, ...].
 	Update event latches both simultaneously.
-   *
-   * */
+	*
+	* */
+	char response[100];
+
+	HAL_TIM_PWM_Start_DMA(&htim1, TIM_CHANNEL_1, (uint32_t*)pspwm_active, (uint16_t)g_ns_active);
+	HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
 
 
-  HAL_TIM_PWM_Start_DMA(&htim1, TIM_CHANNEL_1, (uint32_t*)pspwm_active, (uint16_t)g_ns_active);
-  HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
+	HAL_TIM_PWM_Start_DMA(&htim1, TIM_CHANNEL_2, (uint32_t*)pspwm_active_inv, (uint16_t)g_ns_active);
+	HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_2);
+	HAL_Delay(100);
 
-
-  HAL_TIM_PWM_Start_DMA(&htim1, TIM_CHANNEL_2, (uint32_t*)pspwm_active_inv, (uint16_t)g_ns_active);
-  HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_2);
-  HAL_Delay(100);
-
-  HAL_GPIO_WritePin(PE3_GPIO_Port, PE3_Pin, GPIO_PIN_SET);
-
-  //HAL_Delay(300);
-  // Set TIM3 ARR for 6400 Hz (50 Hz sine, NS=128)
-  // F_TIM3 = F_OUT * NS
-  // The table hold 1 Period of a sine wave 2pi to get te desired F_OUT we need to
-  // output F_OUT * NS values per second
-  //__HAL_TIM_SET_AUTORELOAD(&htim3, TIM3_Ticks - 1);
-  //HAL_TIM_OC_Start(&htim3, TIM_CHANNEL_1);
-
-  // Clean D-cache for active buffer before DMA start
-  // Start DMA in circular mode, transferring LUT to TIM1->CCR1
-  //SCB_CleanDCache_by_Addr((uint32_t*)pdma_active_buf, sizeof(sineLookupTable_dynamic1));
-  //HAL_DMA_Start_IT(&hdma_tim3_ch1, (uint32_t) pdma_active_buf, (uint32_t) &(TIM1->CCR1), NS);
-  //__HAL_TIM_ENABLE_DMA(&htim3, TIM_DMA_CC1);
-
-
-
-  char response[100];
+	HAL_GPIO_WritePin(PE3_GPIO_Port, PE3_Pin, GPIO_PIN_SET);
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
-  {
+	while (1)
+	{
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
 
-	if (spwm_start_request_f)
-	{
+		if (spwm_start_request_f)
+		{
 
-		/* Swap active / inactive pointers */
-		uint16_t *t;
-		t = pspwm_active;         pspwm_active        = pspwm_inactive;        pspwm_inactive        = t;
-		t = pspwm_active_inv;     pspwm_active_inv    = pspwm_inactive_inv;    pspwm_inactive_inv    = t;
+			/* Swap active / inactive pointers */
+			uint16_t *t;
+			t = pspwm_active;         pspwm_active        = pspwm_inactive;        pspwm_inactive        = t;
+			t = pspwm_active_inv;     pspwm_active_inv    = pspwm_inactive_inv;    pspwm_inactive_inv    = t;
 
-		uint32_t t_ns;
-		t_ns = g_ns_active; g_ns_active = g_ns_inactive; g_ns_inactive = t_ns;
+			uint32_t t_ns;
+			t_ns = g_ns_active; g_ns_active = g_ns_inactive; g_ns_inactive = t_ns;
 
 
-		SCB_CleanDCache_by_Addr((uint32_t*)pspwm_active,     ((g_ns_active*sizeof(uint16_t)+31U)&~31U));
-		SCB_CleanDCache_by_Addr((uint32_t*)pspwm_active_inv, ((g_ns_active*sizeof(uint16_t)+31U)&~31U));
+			SCB_CleanDCache_by_Addr((uint32_t*)pspwm_active,     ((g_ns_active*sizeof(uint16_t)+31U)&~31U));
+			SCB_CleanDCache_by_Addr((uint32_t*)pspwm_active_inv, ((g_ns_active*sizeof(uint16_t)+31U)&~31U));
 
-		/* Restart DMA on both channels with new buffers */
-		HAL_TIM_PWM_Start_DMA(&htim1, TIM_CHANNEL_1, (uint32_t*)pspwm_active,     (uint16_t)g_ns_active);
-		HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
-		HAL_TIM_PWM_Start_DMA(&htim1, TIM_CHANNEL_2, (uint32_t*)pspwm_active_inv, (uint16_t)g_ns_active);
-		HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_2);
+			/* Restart DMA on both channels with new buffers */
+			HAL_TIM_PWM_Start_DMA(&htim1, TIM_CHANNEL_1, (uint32_t*)pspwm_active,     (uint16_t)g_ns_active);
+			HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
+			HAL_TIM_PWM_Start_DMA(&htim1, TIM_CHANNEL_2, (uint32_t*)pspwm_active_inv, (uint16_t)g_ns_active);
+			HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_2);
 
-		spwm_start_request_f = 0;
+			spwm_start_request_f = 0;
+		}
+		else if (adc1_sampl_ready_f)
+		{
+			//i_adc_value = HAL_ADC_GetValue(&hadc1);
+
+			// Conv value = (2^16-1 / 2) * (1 + ((Vinp - Vinn) / Vref))
+			// Here we get the voltage value in mV
+			//i_voltage_value = (3300*2*i_adc_value/65535) - 3300;
+			// Map voltage to current (A), ±2.05 V = ±4 A
+			//load_current_value = (i_voltage_value / (1000 * 2.05f)) * 4000.0f;
+
+			adc1_sampl_ready_f = 0;
+		}
+		else if (adc2_sampl_ready_f)
+		{
+			v_adc_value = HAL_ADC_GetValue(&hadc2);
+
+			// Conv value = (2^16-1 / 2) * (1 + ((Vinp - Vinn) / Vref))
+			// Here we get the voltage value in mV
+			v_voltage_value = (3300*2*v_adc_value/65535) - 3300;
+			// Map voltage to current (A), ±2.05 V = ±4 A
+			// I got 19000 for 19V do i need to devide the value by 1000????
+
+			// DC LINK voltage in V
+			dc_link_voltage_value = (v_voltage_value / (1000 * 2.0f)) * 400.0f;
+
+			adc2_sampl_ready_f = 0;
+		}
+		else if (usb_print_f)
+		{
+
+			int32_t amps    = (int32_t)current_rms;                        // integer part
+			int32_t deci_a   = (int32_t)(abs((current_rms - amps) * 10));       // first decimal digit
+
+			int32_t volts    = (int32_t)dc_link_voltage_value;                        // integer part
+			int32_t deci_v   = (int32_t)(abs((dc_link_voltage_value - volts) * 10));       // first decimal digit
+
+			sprintf(response, "LC_RMS = %ld.%01ld mA, DCLINK = %ld.%01ld V \r\n", (long)amps, (long)deci_a, (long)volts, (long)deci_v);
+			CDC_Transmit_FS((uint8_t*)response, strlen(response));
+
+			SCB_InvalidateDCache_by_Addr((uint32_t*)load_current_buff, (LOAD_CURRENT_BUFFER_LENGHT * sizeof(uint32_t)+31U)&~31U);
+			float peak_curr = find_peak_current((uint32_t*)load_current_buff, LOAD_CURRENT_BUFFER_LENGHT);
+			int32_t peak_amp = (int32_t)peak_curr;
+			int32_t deci_peak_amp = (int32_t)(abs((peak_curr - peak_amp) * 10));
+			sprintf(response, "LC_PEAK = %ld.%01ld mA\r\n", (long)peak_amp, (long)deci_peak_amp);
+			CDC_Transmit_FS((uint8_t*)response, strlen(response));
+
+			usb_print_f = 0;
+		}
+		// Check if data has been received over USB VCP
+		else if (cmd_length > 0)
+		{
+			cli_processCommand(cmd_usb_buffer);  // Process the command
+			cmd_length = 0;  // Reset the buffer after processing
+		}
+
+
 	}
-	else if (adc1_sampl_ready_f)
-	{
-		i_adc_value = HAL_ADC_GetValue(&hadc1);
-
-		// Conv value = (2^16-1 / 2) * (1 + ((Vinp - Vinn) / Vref))
-		// Here we get the voltage value in mV
-		i_voltage_value = (3300*2*i_adc_value/65535) - 3300;
-		// Map voltage to current (A), ±2.05 V = ±4 A
-		load_current_value = (i_voltage_value / (1000 * 2.05f)) * 4000.0f;
-
-		adc1_sampl_ready_f = 0;
-	}
-	else if (adc2_sampl_ready_f)
-	{
-		v_adc_value = HAL_ADC_GetValue(&hadc2);
-
-		// Conv value = (2^16-1 / 2) * (1 + ((Vinp - Vinn) / Vref))
-		// Here we get the voltage value in mV
-		v_voltage_value = (3300*2*v_adc_value/65535) - 3300;
-		// Map voltage to current (A), ±2.05 V = ±4 A
-		// I got 19000 for 19V do i need to devide the value by 1000????
-
-		// DC LINK voltage in V
-		dc_link_voltage_value = (v_voltage_value / (1000 * 2.0f)) * 400.0f;
-
-		adc2_sampl_ready_f = 0;
-	}
-	else if (usb_print_f)
-	{
-
-		int32_t amps    = (int32_t)current_rms;                        // integer part
-		int32_t deci_a   = (int32_t)(abs((current_rms - amps) * 10));       // first decimal digit
-
-		int32_t volts    = (int32_t)dc_link_voltage_value;                        // integer part
-		int32_t deci_v   = (int32_t)(abs((dc_link_voltage_value - volts) * 10));       // first decimal digit
-
-		sprintf(response, "LC_RMS = %ld.%01ld mA, DCLINK = %ld.%01ld V \r\n", (long)amps, (long)deci_a, (long)volts, (long)deci_v);
-		CDC_Transmit_FS((uint8_t*)response, strlen(response));
-
-		usb_print_f = 0;
-	}
-	// Check if data has been received over USB VCP
-	else if (cmd_length > 0)
-	{
-		cli_processCommand(cmd_usb_buffer);  // Process the command
-		cmd_length = 0;  // Reset the buffer after processing
-	}
-
-
-  }
   /* USER CODE END 3 */
 }
 
@@ -436,6 +453,26 @@ void PeriphCommonClock_Config(void)
 /* USER CODE BEGIN 4 */
 
 
+/**
+  * @brief  EXTI Line Detection Callback
+  * @param  GPIO_Pin Specifies the port pin connected to the EXTI line
+  * @retval None
+  */
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  if (GPIO_Pin == ADXL345_IT_Pin) {
+      /* Read acceleration data when interrupt occurs */
+      if (ADXL345_I2C_ReadAccXYZ(faccelData, OUTPUT_FLOAT) == HAL_OK) {
+          // Data is now in accelData[0] (X), accelData[1] (Y), accelData[2] (Z) in g (scaled by gain)
+          // Process data here, e.g., print or store
+          // Example: Use debug output if available
+          // printf("X: %d, Y: %d, Z: %d mg\r\n", accelData[0], accelData[1], accelData[2]);
+      } else {
+          Error_Handler(); // Handle read failure
+      }
+  }
+}
+
 
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
@@ -452,6 +489,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 //		 y = (recivedData[3]<<8) | recivedData[2];
 //		 z = (recivedData[5]<<8) | recivedData[4];
 //
+
+		 // SEnsitivity or scale factor at 10bit mode with +-4g -> 7.8mg/LSB
 //		 gx = x * 0.0078;
 //		 gy = y * 0.0078;
 //		 gz = z * 0.0078;
@@ -483,14 +522,12 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc)
 {
-    if (hadc == &hadc1) {
+    if (hadc == &hadc1)
+    {
         // First half of buffer ready (adc1_buf[0..127])
+		SCB_InvalidateDCache_by_Addr((uint32_t*)&load_current_buff[0], ((LOAD_CURRENT_BUFFER_LENGHT/2) * sizeof(uint32_t)+31U)&~31U);
+		process_rms(&load_current_buff[0], LOAD_CURRENT_BUFFER_LENGHT/2);
 
-    	if (hadc->Instance == ADC1)
-    	{
-			SCB_InvalidateDCache_by_Addr((uint32_t*)&load_current_buff[0], ((LOAD_CURRENT_BUFFER_LENGHT/2) * sizeof(uint32_t)+31U)&~31U);
-			process_rms(&load_current_buff[0], LOAD_CURRENT_BUFFER_LENGHT/2);
-		}
     }
 }
 
@@ -548,8 +585,8 @@ void Error_Handler(void)
   __disable_irq();
   while (1)
   {
-
-	  HAL_GPIO_WritePin(PE3_GPIO_Port, PE3_Pin, GPIO_PIN_SET);
+	  HAL_Delay(500);
+	  HAL_GPIO_TogglePin(PE3_GPIO_Port, PE3_Pin);
 
   }
   /* USER CODE END Error_Handler_Debug */

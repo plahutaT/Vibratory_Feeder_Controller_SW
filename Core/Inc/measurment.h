@@ -14,10 +14,8 @@
 #include "main.h"
 
 
-
-static inline float adc_to_diff_voltage(uint32_t raw);
-static inline float diff_voltage_to_current(float vdiff);
 void process_rms(uint32_t *buf, uint32_t len);
+float find_peak_current(uint32_t *buf, uint32_t len);
 
 
 #endif /* INC_MEASURMENT_H_ */

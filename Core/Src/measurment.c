@@ -9,12 +9,13 @@
 
 
 #define LOAD_CURRENT_BUFFER_LENGHT 256
-#define VREF          3.3f  // reference voltage
+#define VREF          3300.0f  // reference voltage
 #define ADC_RES       65535.0f
 #define CURR_FS_V     2050.0f   // full-scale differential voltage ±2.05 V, ±2050 mV
 #define CURR_FS_A     4000.0f    // corresponding current ±4 A, ±4000 mA
 
-
+static inline float adc_to_diff_voltage(uint32_t raw);
+static inline float diff_voltage_to_current(float vdiff);
 
 float current_rms = 0.0f;
 
@@ -48,4 +49,21 @@ void process_rms(uint32_t *buf, uint32_t len)
 
     float mean_sq = (float)(sum_sq / (double)len);
     current_rms = sqrtf(mean_sq);
+}
+
+// --- Function to find peak absolute current value (Amps)
+float find_peak_current(uint32_t *buf, uint32_t len)
+{
+    float peak_current = 0.0f;
+
+    for (uint16_t i = 0; i < len; i++) {
+        float vdiff = adc_to_diff_voltage(buf[i]);
+        float i_val = diff_voltage_to_current(vdiff);
+        float abs_i_val = fabsf(i_val);
+        if (abs_i_val > peak_current) {
+            peak_current = abs_i_val;
+        }
+    }
+
+    return peak_current;
 }
